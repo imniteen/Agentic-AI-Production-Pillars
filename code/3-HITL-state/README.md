@@ -4,6 +4,8 @@
 
 This step demonstrates a production-ready **Human-In-The-Loop (HITL)** implementation with **persistent state management** using PostgreSQL and LangGraph checkpointers. The system enables multi-turn conversations with session continuity, allowing agents to pause for human review and resume seamlessly.
 
+**Now with Voice Support!** Users can interact with the agent using voice (speech-to-text) and hear responses via text-to-speech using Azure Speech Service.
+
 ## Key Features
 
 - **🔄 Session Persistence**: PostgreSQL-based state management with LangGraph checkpointers
@@ -12,6 +14,8 @@ This step demonstrates a production-ready **Human-In-The-Loop (HITL)** implement
 - **🎯 Interrupt/Resume**: LangGraph's built-in checkpoint mechanism pauses at human node
 - **📊 Observability**: OpenTelemetry tracing with trace ID correlation
 - **🔐 Production-Ready**: Connection pooling, error handling, graceful fallbacks
+- **🎤 Voice Input**: Speak your questions using Azure Speech-to-Text
+- **🔊 Voice Output**: Hear agent responses via Azure Text-to-Speech
 
 ---
 
@@ -120,6 +124,104 @@ David: "I can see you need this urgently. I've approved a full refund..."
 - **Docker Desktop** (for PostgreSQL)
 - **OpenAI API Key**
 - **LangSmith API Key** (optional, for tracing)
+- **Azure Speech Service** (optional, for voice features)
+
+---
+
+## Voice Feature Setup (Azure Speech Service)
+
+The voice feature allows users to speak their questions and hear agent responses. This requires Azure Speech Service.
+
+### Step 1: Create Azure Speech Resource
+
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Click **Create a resource** → Search for **"Speech"** → Select **Speech** service
+3. Click **Create**
+4. Fill in the details:
+   - **Subscription**: Select your Azure subscription
+   - **Resource Group**: Create new or select existing
+   - **Region**: Choose a region close to you (e.g., `eastus`, `westus2`, `westeurope`)
+   - **Name**: Give it a unique name (e.g., `my-speech-service`)
+   - **Pricing Tier**:
+     - **Free (F0)**: 5 hours/month free - good for testing
+     - **Standard (S0)**: Pay-as-you-go - for production
+5. Click **Review + create** → **Create**
+6. Wait for deployment to complete
+
+### Step 2: Get Your Credentials
+
+1. Go to your Speech resource in Azure Portal
+2. Click **Keys and Endpoint** in the left menu
+3. Copy the following values:
+   - **Key 1** → This is your `AZURE_SPEECH_KEY`
+   - **Location/Region** → This is your `AZURE_SPEECH_REGION` (e.g., `eastus`)
+
+### Step 3: Configure Environment
+
+Add these to your `.env` file:
+
+```bash
+# Azure Speech Service Configuration
+AZURE_SPEECH_KEY=your-32-character-key-here
+AZURE_SPEECH_REGION=eastus
+AZURE_SPEECH_VOICE=en-US-JennyNeural
+AZURE_SPEECH_LANGUAGE=en-US
+```
+
+### Available Voice Options
+
+| Voice Name | Gender | Style |
+|------------|--------|-------|
+| `en-US-JennyNeural` | Female | Friendly, natural |
+| `en-US-GuyNeural` | Male | Conversational |
+| `en-US-AriaNeural` | Female | Chat-optimized |
+| `en-US-DavisNeural` | Male | Professional |
+| `en-US-JaneNeural` | Female | Calm, pleasant |
+
+Full list: [Azure Neural Voices](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts#neural-voices)
+
+### Step 4: Install Speech SDK
+
+The Speech SDK is included in dependencies, but if needed:
+
+```bash
+uv add azure-cognitiveservices-speech
+```
+
+### Step 5: Verify Voice Setup
+
+After starting the backend, check if voice is enabled:
+
+```bash
+curl http://127.0.0.1:8001/speech-status
+```
+
+Expected response (if configured):
+```json
+{
+  "available": true,
+  "region": "eastus",
+  "voice": "en-US-JennyNeural",
+  "language": "en-US"
+}
+```
+
+### Voice Feature Usage
+
+1. **Start the UI** at `http://127.0.0.1:7860`
+2. **Voice status** is shown at the top (green = enabled, red = disabled)
+3. **To use voice**:
+   - Click the **microphone** icon to start recording
+   - Speak your question clearly
+   - Click the **microphone** again to stop
+   - The agent will respond with text AND audio playback
+
+### Fallback Behavior
+
+If Azure Speech Service is not configured:
+- Voice input/output components are disabled
+- Text chat remains fully functional
+- No errors are thrown - graceful degradation
 
 ---
 
