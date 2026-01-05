@@ -16,3 +16,4 @@ class OverallState(TypedDict):
     awaiting_human_input: Optional[bool]
     conversation_history: Optional[list[dict]]
     pending_action: Optional[str]
+    response_language: Optional[str]  # Language code for multi-lingual responses (e.g., "hi-IN", "en-US")

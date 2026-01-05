@@ -148,43 +148,49 @@ async def compile_graph():
     )
 
 
-async def run_agent(user_id: str, user_message: str, session_id: str | None = None) -> tuple[OverallState, str]:
+async def run_agent(
+    user_id: str,
+    user_message: str,
+    session_id: str | None = None,
+    response_language: str | None = None
+) -> tuple[OverallState, str]:
     """
     Run the agent workflow with state persistence.
-    
+
     Args:
         user_id: User identifier
         user_message: User's message
         session_id: Optional session ID for conversation continuity
-    
+        response_language: Optional language code for multi-lingual responses (e.g., "hi-IN")
+
     Returns:
         Tuple of (final_state, session_id)
     """
     # Generate session_id if not provided
     if session_id is None:
         session_id = str(uuid.uuid4())
-    
+
     # Create thread_id for checkpointing
     thread_id = f"{user_id}:{session_id}"
-    
+
     config = {
         "configurable": {
             "thread_id": thread_id,
             "checkpoint_ns": "customer_service"
         }
     }
-    
+
     # Get compiled graph
     graph = await compile_graph()
-    
+
     # print mermaid diagram for debugging
     mermaid = graph.get_graph().draw_mermaid()
     logger.info("Compiled StateGraph:\n" + mermaid)
-        
+
     # Check if we're resuming from a checkpoint
     checkpointer = await get_checkpointer()
     existing_state = await checkpointer.aget(config)
-    
+
     if existing_state:
         logger.info(f"Resuming conversation for session: {session_id}")
         # Resume with new user message
@@ -192,6 +198,7 @@ async def run_agent(user_id: str, user_message: str, session_id: str | None = No
             "user_message": user_message,
             "user_id": user_id,
             "session_id": session_id,
+            "response_language": response_language,
         }
     else:
         logger.info(f"Starting new conversation for session: {session_id}")
@@ -202,14 +209,15 @@ async def run_agent(user_id: str, user_message: str, session_id: str | None = No
             "session_id": session_id,
             "conversation_history": [],
             "awaiting_human_input": False,
+            "response_language": response_language,
         }
-    
+
     # Execute graph
     result: OverallState = await graph.ainvoke(initial, config=config)
-    
+
     # Check if we hit an interrupt (human node)
     if result.get("intent") == "human" and not result.get("final_reply"):
         result["awaiting_human_input"] = True
         logger.info(f"Conversation paused for human review: {session_id}")
-    
+
     return result, session_id

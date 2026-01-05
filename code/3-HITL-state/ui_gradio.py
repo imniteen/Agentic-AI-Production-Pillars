@@ -150,14 +150,24 @@ def call_voice_agent(audio_path: str, history: list) -> tuple:
         session_id = result.get("session_id")
         awaiting_human_input = result.get("awaiting_human_input", False)
         audio_file_path = result.get("audio_file")
+        detected_language = result.get("detected_language", "en-US")
 
         # Store session_id for conversation continuity
         if session_id:
             session_state["session_id"] = session_id
 
-        # Update user message with transcription
+        # Map language code to friendly name
+        language_names = {
+            "en-US": "English (US)", "en-IN": "English (India)", "en-GB": "English (UK)",
+            "hi-IN": "Hindi", "ta-IN": "Tamil", "te-IN": "Telugu",
+            "mr-IN": "Marathi", "gu-IN": "Gujarati", "kn-IN": "Kannada",
+            "ml-IN": "Malayalam", "bn-IN": "Bengali", "pa-IN": "Punjabi",
+        }
+        lang_name = language_names.get(detected_language, detected_language)
+
+        # Update user message with transcription and detected language
         if transcribed_text:
-            history[-1]["content"] = f"🎤 {transcribed_text}"
+            history[-1]["content"] = f"🎤 [{lang_name}] {transcribed_text}"
         else:
             history[-1]["content"] = "🎤 *(Could not transcribe audio)*"
 
@@ -244,6 +254,7 @@ with gr.Blocks(
         **Features:**
         - 💬 **Text Chat**: Type your message in the text box
         - 🎤 **Voice Chat**: Record your question using the microphone
+        - 🌐 **Multi-lingual**: Speak in English, Hindi, Tamil, Telugu, Marathi, and more!
         - 🔄 **Session Continuity**: Conversation history is preserved
         - 🤝 **Human Escalation**: Complex issues are escalated for review
         """
@@ -251,10 +262,12 @@ with gr.Blocks(
 
     # Voice status indicator
     if speech_available:
+        auto_detect_langs = speech_status.get('auto_detect_languages', [])
+        lang_count = len(auto_detect_langs)
         gr.Markdown(
             f"""
             <div class="voice-status voice-enabled">
-            ✅ Voice enabled | Region: {speech_status.get('region')} | Voice: {speech_status.get('voice')}
+            ✅ Voice enabled | Region: {speech_status.get('region')} | 🌐 Multi-lingual ({lang_count} languages auto-detected)
             </div>
             """,
             elem_classes=["voice-status"]

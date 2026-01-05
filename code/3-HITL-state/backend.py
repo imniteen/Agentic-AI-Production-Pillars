@@ -123,6 +123,7 @@ class VoiceChatResponse(BaseModel):
     conversation_context: Optional[dict] = None
     transcribed_text: str = ""
     audio_file: Optional[str] = None  # Path to audio response file
+    detected_language: str = "en-US"  # Language detected from user's speech
 
 
 @app.post("/voice-chat", response_model=VoiceChatResponse)
@@ -161,8 +162,10 @@ async def voice_chat_endpoint(
                 f.write(content)
             logger.info(f"TraceID={trace_id} Saved audio file: {input_audio_path}")
 
-            # Speech-to-Text
-            transcribed_text, stt_success = speech_service.speech_to_text(str(input_audio_path))
+            # Speech-to-Text with auto language detection
+            transcribed_text, stt_success, detected_language = speech_service.speech_to_text(
+                str(input_audio_path), auto_detect=True
+            )
 
             if not stt_success or not transcribed_text:
                 logger.warning(f"TraceID={trace_id} STT failed or empty result")
@@ -173,13 +176,19 @@ async def voice_chat_endpoint(
                     session_id=session_id or "",
                     awaiting_human_input=False,
                     transcribed_text="",
-                    audio_file=None
+                    audio_file=None,
+                    detected_language="en-US"
                 )
 
-            logger.info(f"TraceID={trace_id} Transcribed: {transcribed_text[:100]}...")
+            logger.info(f"TraceID={trace_id} Transcribed ({detected_language}): {transcribed_text[:100]}...")
 
-            # Run agent with transcribed text
-            state, result_session_id = await run_agent(user_id, transcribed_text, session_id)
+            # Run agent with transcribed text and language for multi-lingual response
+            state, result_session_id = await run_agent(
+                user_id,
+                transcribed_text,
+                session_id,
+                response_language=detected_language
+            )
 
             # Extract response data
             reply = state.get("final_reply")
@@ -193,13 +202,15 @@ async def voice_chat_endpoint(
                 else:
                     reply = "Sorry, the server encountered an error. Please try again later."
 
-            # Text-to-Speech for response
+            # Text-to-Speech for response (using detected language for voice selection)
             output_audio_path = None
             if speech_service.is_available:
-                tts_output_path, tts_success = speech_service.text_to_speech(reply)
+                tts_output_path, tts_success = speech_service.text_to_speech(
+                    reply, language=detected_language
+                )
                 if tts_success:
                     output_audio_path = tts_output_path
-                    logger.info(f"TraceID={trace_id} TTS output: {output_audio_path}")
+                    logger.info(f"TraceID={trace_id} TTS output: {output_audio_path} (language: {detected_language})")
 
             # Build conversation context
             conversation_context = {
@@ -210,7 +221,8 @@ async def voice_chat_endpoint(
 
             logger.info(
                 f"TraceID={trace_id} Response: intent={intent} "
-                f"awaiting_human={awaiting_human_input} session_id={result_session_id}"
+                f"awaiting_human={awaiting_human_input} session_id={result_session_id} "
+                f"detected_language={detected_language}"
             )
 
             return VoiceChatResponse(
@@ -221,7 +233,8 @@ async def voice_chat_endpoint(
                 awaiting_human_input=awaiting_human_input,
                 conversation_context=conversation_context,
                 transcribed_text=transcribed_text,
-                audio_file=output_audio_path
+                audio_file=output_audio_path,
+                detected_language=detected_language
             )
 
         except Exception as e:
@@ -234,7 +247,8 @@ async def voice_chat_endpoint(
                 session_id=session_id or "",
                 awaiting_human_input=False,
                 transcribed_text="",
-                audio_file=None
+                audio_file=None,
+                detected_language="en-US"
             )
 
         finally:
@@ -265,12 +279,16 @@ async def get_audio_file(filename: str):
 @app.get("/speech-status")
 async def speech_status():
     """Check if speech service is available and configured."""
+    from services.speech_service import LANGUAGE_VOICE_MAP, AUTO_DETECT_LANGUAGES
     speech_service = get_speech_service()
     return {
         "available": speech_service.is_available,
         "region": speech_service.speech_region if speech_service.is_available else None,
-        "voice": speech_service.voice_name if speech_service.is_available else None,
-        "language": speech_service.speech_recognition_language if speech_service.is_available else None
+        "default_voice": speech_service.voice_name if speech_service.is_available else None,
+        "default_language": speech_service.speech_recognition_language if speech_service.is_available else None,
+        "multi_lingual": True,
+        "auto_detect_languages": AUTO_DETECT_LANGUAGES if speech_service.is_available else [],
+        "supported_languages": list(LANGUAGE_VOICE_MAP.keys()) if speech_service.is_available else []
     }
 
 
